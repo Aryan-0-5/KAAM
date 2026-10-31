@@ -13,7 +13,7 @@ export const isConnected = (s) => !!(s && s.root && s.refresh && !s.broken);
 // ---------- low-level calls (real Google, or a local fake for testing) ----------
 async function accessToken() {
   const s = await driveState();
-  if (!s || !s.refresh) throw httpErr(409, "Google Drive isn't connected yet. Ask the admin to connect it in More.");
+  if (!s || !s.refresh) throw httpErr(409, "Google Drive isn't connected yet. Ask the admin to connect it in their profile settings.");
   const c = JSON.parse((await redis("GET", K.gtoken)) || "null");
   if (c && c.exp > Date.now() + 60000) return c.token;
   const r = await fetch("https://oauth2.googleapis.com/token", {
@@ -24,7 +24,7 @@ async function accessToken() {
   const j = await r.json().catch(() => ({}));
   if (!r.ok) {
     if (j.error === "invalid_grant") { s.broken = true; await saveDriveState(s); }
-    throw httpErr(502, "The Google Drive connection stopped working. Ask the admin to reconnect it in More.");
+    throw httpErr(502, "The Google Drive connection stopped working. Ask the admin to reconnect it in their profile settings.");
   }
   await redis("SET", K.gtoken, JSON.stringify({ token: j.access_token, exp: Date.now() + j.expires_in * 1000 }));
   return j.access_token;

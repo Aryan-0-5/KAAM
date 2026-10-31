@@ -40,7 +40,7 @@ export default wrap(async (req, res) => {
   const b = await readJson(req);
 
   if (b.action === "start") {
-    if (!isConnected(await driveState())) throw httpErr(409, "Google Drive isn't connected yet, so files can't be saved. Ask the admin to connect it in More.");
+    if (!isConnected(await driveState())) throw httpErr(409, "Google Drive isn't connected yet, so files can't be saved. Ask the admin to connect it in their profile settings.");
     const ts = await redis("HGET", K.tasks, String(b.task || ""));
     if (!ts) throw httpErr(404, "Save the task first, then attach files.");
     const task = JSON.parse(ts);
