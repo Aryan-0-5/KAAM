@@ -1,6 +1,6 @@
 import { diff, isEmpty } from "./diff.js";
 
-const VERSION = "31 Oct · 3";
+const VERSION = "31 Oct · 4";
 
 // ================= helpers =================
 const $ = (s, el = document) => el.querySelector(s);
@@ -59,9 +59,10 @@ const ICON = {
   lock: '<rect x="5" y="11" width="14" height="9" rx="1.5"/><path d="M8 11V8a4 4 0 018 0v3"/>',
   doc: '<path d="M6 3h8l5 5v13H6z"/><path d="M14 3v5h5M9 13h7M9 17h7"/>',
   filter: '<path d="M4 6h16M7 12h10M10 18h4"/>',
+  grid: '<rect x="4" y="4" width="7" height="7" rx="1"/><rect x="13" y="4" width="7" height="7" rx="1"/><rect x="4" y="13" width="7" height="7" rx="1"/><rect x="13" y="13" width="7" height="7" rx="1"/>',
 };
 const ico = (n) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICON[n]}</svg>`;
-const LOGO = `<svg viewBox="0 0 40 40" aria-hidden="true"><rect x="5" y="3" width="30" height="34" rx="4" fill="#fff"/><path d="M11 13h18M11 20h18M11 27h10" stroke="#B9C5CF" stroke-width="2.4" stroke-linecap="round"/><path d="M22 27.5l3.5 3.5 7-8" stroke="#C7841A" stroke-width="3.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+const LOGO = `<svg viewBox="0 0 100 100" aria-hidden="true"><rect width="100" height="100" rx="23" fill="#F2ECE0"/><g transform="translate(2.5 2.5) scale(.95)"><polygon points="17,24 31,24 31,76 17,76" fill="#173A5E"/><polygon points="28,53 53,24 71,24 39,60" fill="#173A5E"/><polygon points="36,47 72,76 54,76 28,55" fill="#173A5E"/><polygon points="75,64 87,64 87,76 75,76" fill="#E2A02B"/></g></svg>`;
 
 const STATUS = [
   ["todo", "To do"], ["progress", "In progress"], ["waiting", "Waiting"], ["done", "Done"], ["dropped", "Dropped"], ["other", "Other"],
@@ -245,7 +246,7 @@ function filePicker(host, taskId, initial = []) {
     if (ids.length) api("/api/upload", { json: { action: "discard", ids } }).catch(() => {});
   });
   if (!S.drive?.connected) {
-    host.innerHTML = `<p class="muted small" style="margin:0">Google Drive isn't connected yet, so files can't be attached. ${meP().admin ? "Connect it in More." : "Ask the admin to connect it."}</p>`;
+    host.innerHTML = `<p class="muted small" style="margin:0">Google Drive isn't connected yet, so files can't be attached. ${meP().admin ? "Connect it in your profile (the round button at the top right)." : "Ask the admin to connect it."}</p>`;
     return { get files() { return st.files; }, get busy() { return false; } };
   }
   host.innerHTML = `
@@ -354,16 +355,16 @@ function askText(title, label, value = "", allowEmpty = false) {
 }
 
 // ================= routing & shell =================
-const route = () => (location.hash.replace(/^#\/?/, "").split("?")[0] || "todo").split("/");
+const route = () => (location.hash.replace(/^#\/?/, "").split("?")[0] || "home").split("/");
 const hashParam = (k) => new URLSearchParams(location.hash.split("?")[1] || "").get(k);
 
 function shell(active, inner) {
-  const nav = [["todo", "To-do", "check"], ["all", "All tasks", "list"], ["new", "New task", "plus"], ["history", "History", "box"], ["more", "More", "more"]];
+  const nav = [["home", "Dashboard", "grid"], ["todo", "To-do", "check"], ["new", "New task", "plus"], ["all", "All tasks", "list"], ["history", "History", "box"]];
   return `
   <header class="top"><div class="top-in">
-    <a class="brand" href="#/todo">${LOGO}Kaam</a>
+    <a class="brand" href="#/home">${LOGO}Kaam</a>
     <nav class="topnav">${nav.map(([k, l]) => `<a href="#/${k}" class="${k === active ? "on" : ""}${k === "new" ? " new" : ""}">${l}</a>`).join("")}</nav>
-    <a class="who" href="#/more"><span class="sync" id="sync"></span>${avatar(S.me)}</a>
+    <a class="who${active === "me" ? " on" : ""}" href="#/me" aria-label="Your profile and settings"><span class="sync" id="sync"></span>${avatar(S.me)}</a>
   </div></header>
   <main id="main">${inner}</main>
   <nav class="botnav">${nav.map(([k, l, i]) => k === "new"
@@ -386,10 +387,11 @@ function render() {
   } else if (r === "all") { html = allPage(); after = bindAll; }
   else if (r === "history") { html = historyPage(); after = bindHistory; }
   else if (r === "new") { html = newPage(); after = bindNew; }
-  else if (r === "more") { html = morePage(); after = bindMore; }
+  else if (r === "me" || r === "more") { active = "me"; html = morePage(); after = bindMore; }
+  else if (r === "todo") { html = todoPage(); after = bindTodo; }
   else if (r === "file") { const f = S.files[a]; active = f && taskById(f.taskId) && !isOpen(taskById(f.taskId)) ? "history" : "all"; html = filePage(a); after = () => bindFile(a); }
-  else if (r === "log") { active = "more"; html = `<div id="logwrap"><div class="empty">Loading changes…</div></div>`; after = loadLog; }
-  else { active = "todo"; html = todoPage(); after = bindTodo; }
+  else if (r === "log") { active = "me"; html = `<div id="logwrap"><div class="empty">Loading changes…</div></div>`; after = loadLog; }
+  else { active = "home"; html = dashPage(); after = bindDash; }
   if (r === "new" && same && $("#newform")) { syncBadge(); return; } // don't wipe a half-filled form
   app.innerHTML = shell(active, html);
   syncBadge();
@@ -459,8 +461,137 @@ async function renderLogin(pick) {
 function signOut() {
   S.token = null; S.loaded = false; S.tasks = [];
   store.del("token");
-  location.hash = "#/todo";
+  location.hash = "#/home";
   render();
+}
+
+// ================= dashboard =================
+const dueOf = (t) => t.target || t.deadline || "";
+const isOverdue = (t) => isOpen(t) && dueOf(t) && dueOf(t) < today();
+const isParked = (t) => t.status === "waiting" && t.followUp && t.followUp > today();
+
+// Scorecard: on time (last 90 days), keeping open tasks moving, updates this week, streak.
+function scorecard() {
+  const t0 = today(), from = addDays(t0, -90), wk = Date.now() - 7 * 864e5;
+  return family().map((p) => {
+    const mine = S.tasks.filter((t) => (t.assignees || []).includes(p.id));
+    const closed = mine.filter((t) => t.status === "done" && t.closedAt && localDate(t.closedAt) >= from && dueOf(t));
+    const ontime = closed.filter((t) => localDate(t.closedAt) <= dueOf(t)).length;
+    const open = mine.filter(isOpen);
+    const moving = open.filter((t) => dayDiff(lastAction(t), t0) <= 7 || isParked(t)).length;
+    const ents = S.tasks.flatMap((t) => (t.entries || []).filter((e) => e.by === p.id && e.at));
+    const week = ents.filter((e) => Date.parse(e.at) >= wk).length;
+    const days = new Set(ents.map((e) => localDate(e.at)));
+    let streak = 0, d = days.has(t0) ? t0 : addDays(t0, -1);
+    while (days.has(d)) { streak++; d = addDays(d, -1); }
+    const parts = [];
+    if (closed.length) parts.push(ontime / closed.length);
+    if (open.length) parts.push(moving / open.length);
+    const score = parts.length ? parts.reduce((a, b) => a + b, 0) / parts.length : null;
+    const label = score === null ? ["Just started", "grey"] : score >= 0.8 ? ["On top of it", "green"] : score >= 0.5 ? ["Steady", "amber"] : ["Needs a nudge", "red"];
+    return { p, closed: closed.length, ontime, open: open.length, moving, week, streak, score, label };
+  }).sort((a, b) => (b.score ?? -1) - (a.score ?? -1) || b.week - a.week || b.streak - a.streak);
+}
+
+function dashPage() {
+  const t0 = today(), month = t0.slice(0, 7);
+  const open = S.tasks.filter(isOpen);
+  const waiting = open.filter((t) => t.status === "waiting");
+  const overdue = open.filter(isOverdue);
+  const follow = open.filter((t) => t.followUp && t.followUp <= t0);
+  const doneMonth = S.tasks.filter((t) => t.status === "done" && t.closedAt && localDate(t.closedAt).startsWith(month));
+  const tile = (n, label, go, tone) => `<button class="tile${n && tone ? " " + tone : ""}" data-go='${esc(JSON.stringify(go))}'><b>${n}</b><span>${label}</span></button>`;
+
+  // setup checklist for the admin while things are incomplete
+  let setup = "";
+  if (meP().admin && (!S.drive?.connected || !family().length)) {
+    setup = `<section class="card sec setup"><header><h2>Finish setting up</h2></header><ol class="steps">
+      <li class="${S.drive?.connected ? "done" : ""}">${S.drive?.connected ? "Google Drive connected" : `<a href="#/me">Connect Google Drive</a> so documents can be saved`}</li>
+      <li class="${family().length ? "done" : ""}">${family().length ? `${plural(family().length, "family member")} added` : `<a href="#/me">Add family members</a> with their PIN and Gmail`}</li></ol></section>`;
+  }
+
+  const groups = todoItems();
+  const people = family().map((p) => {
+    const mine = open.filter((t) => (t.assignees || []).includes(p.id));
+    const need = [...(groups.get(p.id)?.values() || [])].flat().filter((i) => i.kind === "need").length;
+    return { p, n: mine.length, need, late: mine.filter(isOverdue).length };
+  });
+  const unassigned = open.filter((t) => !(t.assignees || []).some((id) => person(id) && !person(id).admin)).length;
+
+  const push = open.filter((t) => dayDiff(lastAction(t), t0) >= 14 && !isParked(t)).sort((a, b) => lastAction(a).localeCompare(lastAction(b)));
+  const waitLong = [...waiting].sort((a, b) => (a.waitingSince || "9").localeCompare(b.waitingSince || "9"));
+  const soon = open.filter((t) => dueOf(t) && dueOf(t) >= t0 && dayDiff(t0, dueOf(t)) <= 14).sort((a, b) => dueOf(a).localeCompare(dueOf(b)));
+  const row = (t, right, sub) => `<li><a href="#/task/${t.id}"><span class="dl-main"><b>${esc(t.title)}</b>${sub ? `<span class="muted small">${sub}</span>` : ""}</span><span class="dl-right">${right}</span></a></li>`;
+  const more = (n, go) => (n > 5 ? `<button class="linkbtn small" data-go='${esc(JSON.stringify(go))}'>See all ${n}</button>` : "");
+  const sc = scorecard();
+
+  return `<div class="pagehead"><div><h1>Dashboard</h1><div class="sub">${fmtD(t0)}, ${new Date().toLocaleDateString("en-IN", { weekday: "long" })}</div></div></div>
+  ${setup}
+  <div class="tiles">
+    ${tile(open.length, "Open tasks", { status: "open" })}
+    ${tile(waiting.length, "Waiting on others", { status: "waiting" }, "amber")}
+    ${tile(overdue.length, "Overdue", { status: "open", target: "late" }, "red")}
+    ${tile(follow.length, "Follow-ups due", { status: "open", follow: "due" }, "amber")}
+    ${tile(doneMonth.length, "Done this month", { page: "history" }, "green")}
+  </div>
+
+  <div class="dash">
+    <section class="card sec">
+      <header><h2>How everyone's doing</h2></header>
+      ${sc.length ? `<ol class="score">${sc.map((r, i) => `<li>
+        <span class="rank">${i + 1}</span>${avatar(r.p.id)}
+        <div class="sc-main"><div class="sc-top"><b>${esc(r.p.id === S.me ? r.p.name + " (you)" : r.p.name)}</b><span class="badge ${r.label[1]}">${r.label[0]}</span></div>
+          <div class="bar"><i style="width:${r.score === null ? 0 : Math.round(r.score * 100)}%" class="${r.label[1]}"></i></div>
+          <div class="sc-facts">
+            <span>${r.closed ? `On time <b>${r.ontime} of ${r.closed}</b>` : `<span class="muted">No finished tasks with dates yet</span>`}</span>
+            <span>${r.open ? `Moving <b>${r.moving} of ${r.open}</b>` : `<span class="muted">No open tasks</span>`}</span>
+            <span><b>${r.week}</b> ${r.week === 1 ? "update" : "updates"} this week</span>
+            <span>${r.streak ? `<b>${r.streak}-day</b> streak` : `<span class="muted">No streak</span>`}</span>
+          </div></div></li>`).join("")}</ol>
+        <details class="how"><summary>How this is worked out</summary>
+          <p><b>On time:</b> tasks they finished in the last 90 days that had a target or deadline, and how many were done by that date.</p>
+          <p><b>Moving:</b> their open tasks updated in the last 7 days. Tasks waiting on someone with a future follow-up date count as moving.</p>
+          <p><b>Updates and streak:</b> counted for whoever added the update, even on someone else's task. A streak is days in a row with at least one update.</p>
+          <p>The label comes from On time and Moving together: 80% and up is On top of it, 50 to 79% is Steady, below 50% is Needs a nudge.</p></details>`
+      : `<p class="muted" style="margin:0">Add family members to see this.</p>`}
+    </section>
+
+    <section class="card sec">
+      <header><h2>By person</h2></header>
+      <ul class="dlist">${people.map((x) => `<li><a href="#" data-go='${esc(JSON.stringify({ status: "open", who: x.p.id }))}'><span class="dl-main" style="flex-direction:row;align-items:center;gap:10px">${avatar(x.p.id)}<b>${esc(x.p.name)}</b></span>
+        <span class="dl-right">${plural(x.n, "task")}${x.need ? `, ${x.need} to get` : ""}${x.late ? `, <span class="flag red">${x.late} overdue</span>` : ""}</span></a></li>`).join("")}
+        ${unassigned ? `<li><a href="#" data-go='${esc(JSON.stringify({ status: "open", who: "none" }))}'><span class="dl-main"><b>Not assigned</b></span><span class="dl-right">${plural(unassigned, "task")}</span></a></li>` : ""}</ul>
+    </section>
+
+    <section class="card sec">
+      <header><h2>Needs a push</h2><span class="muted small">No update for 14+ days</span></header>
+      ${push.length ? `<ul class="dlist">${push.slice(0, 5).map((t) => row(t, `<span class="flag red">${dayDiff(lastAction(t), t0)} days</span>`, (t.assignees || []).length ? esc(namesList(t.assignees)) : "Not assigned")).join("")}</ul>${more(push.length, { status: "open", idle: "14" })}`
+        : `<p class="muted" style="margin:0">Nothing stuck. Every open task has moved in the last two weeks.</p>`}
+    </section>
+
+    <section class="card sec">
+      <header><h2>Waiting longest</h2></header>
+      ${waitLong.length ? `<ul class="dlist">${waitLong.slice(0, 5).map((t) => row(t, t.waitingSince ? `<span class="flag amber">${dayDiff(t.waitingSince, t0)} days</span>` : "", `Waiting on ${esc(t.waitingOn || "someone")}`)).join("")}</ul>${more(waitLong.length, { status: "waiting" })}`
+        : `<p class="muted" style="margin:0">Not waiting on anyone right now.</p>`}
+    </section>
+
+    <section class="card sec">
+      <header><h2>Coming up</h2><span class="muted small">Next 14 days</span></header>
+      ${soon.length ? `<ul class="dlist">${soon.slice(0, 6).map((t) => row(t, `<span class="flag ${dayDiff(t0, dueOf(t)) <= 3 ? "amber" : ""}">${fmtD(dueOf(t))}</span>`, `${t.target ? "Target" : "Deadline"} ${until(dueOf(t))}`)).join("")}</ul>${more(soon.length, { status: "open", target: "30", sort: "target" })}`
+        : `<p class="muted" style="margin:0">No target dates in the next two weeks.</p>`}
+    </section>
+  </div>
+  ${!S.tasks.length ? `<div class="card empty" style="margin-top:16px"><h2>No tasks yet</h2><p>Add the first thing the family needs to get done.</p><a class="btn primary" href="#/new">${ico("plus")} New task</a></div>` : ""}`;
+}
+
+function bindDash() {
+  $$("[data-go]").forEach((b) => (b.onclick = (e) => {
+    e.preventDefault();
+    const go = JSON.parse(b.dataset.go);
+    if (go.page) { location.hash = "#/" + go.page; return; }
+    store.set("filters", { ...F_DEFAULT, ...go });
+    location.hash = "#/all";
+  }));
 }
 
 // ================= to-do =================
@@ -540,7 +671,7 @@ function bindTodo() {
 }
 
 // ================= all tasks =================
-const F_DEFAULT = { q: "", status: "open", who: "", forn: "", cat: "", pri: "", idle: "", target: "", sort: "idle" };
+const F_DEFAULT = { q: "", status: "open", who: "", forn: "", cat: "", pri: "", idle: "", target: "", follow: "", sort: "idle" };
 function filtered(f) {
   const t0 = today();
   let list = S.tasks.filter((t) => {
@@ -552,6 +683,7 @@ function filtered(f) {
     if (f.cat && t.category !== f.cat) return false;
     if (f.pri && (t.priority || "normal") !== f.pri) return false;
     if (f.idle && dayDiff(lastAction(t), t0) < Number(f.idle)) return false;
+    if (f.follow === "due" && !(t.followUp && t.followUp <= t0)) return false;
     if (f.target) {
       const d = t.target || t.deadline;
       if (f.target === "none") { if (d) return false; }
@@ -597,7 +729,7 @@ function taskRow(t) {
 function allPage() {
   const f = { ...F_DEFAULT, ...store.get("filters", {}) };
   const list = filtered(f);
-  const nActive = ["who", "forn", "cat", "pri", "idle", "target"].filter((k) => f[k]).length + (f.status !== "open" ? 1 : 0);
+  const nActive = ["who", "forn", "cat", "pri", "idle", "target", "follow"].filter((k) => f[k]).length + (f.status !== "open" ? 1 : 0);
   const open = store.get("filtersOpen", false);
   const sel = (k, label, opts) => `<label>${label}<select data-f="${k}">${opts.map(([v, l]) => `<option value="${esc(v)}"${String(f[k]) === String(v) ? " selected" : ""}>${esc(l)}</option>`).join("")}</select></label>`;
   const forOpts = [...new Set([...family().map((p) => p.name), ...S.forNames])];
@@ -614,6 +746,7 @@ function allPage() {
     ${sel("cat", "Category", [["", "Any"], ...S.categories.map((c) => [c, c])])}
     ${sel("pri", "Priority", [["", "Any"], ["high", "High"], ["normal", "Normal"], ["low", "Low"]])}
     ${sel("idle", "Last update", [["", "Any time"], ["3", "3+ days ago"], ["7", "7+ days ago"], ["14", "14+ days ago"], ["30", "30+ days ago"]])}
+    ${sel("follow", "Follow-up", [["", "Any"], ["due", "Due today or earlier"]])}
     ${sel("target", "Target date", [["", "Any"], ["late", "Already passed"], ["7", "Within 7 days"], ["30", "Within 30 days"], ["none", "No date set"]])}
     ${sel("sort", "Sort by", [["idle", "Longest without update"], ["target", "Target date, soonest"], ["pri", "Priority"], ["newest", "Newest first"], ["az", "Name, A to Z"]])}
   </div>
@@ -812,7 +945,7 @@ function taskPage(t) {
     <section class="card sec">
       <header><h2>Documents</h2><button class="btn small quiet" data-attach>${ico("clip")} Attach</button></header>
       ${files.length ? `<ul class="doclist">${files.map(({ f, from }) => `<li><a class="docrow" href="#/file/${esc(f.id)}"><b>${esc(fname(f))}</b><span class="from">${f.desc ? esc(f.desc) + "<br>" : ""}${esc(from)}${f.by ? `, added by ${esc(pname(f.by))}` : ""}</span></a>${fmeta(f)?.link ? `<a class="btn small" href="${esc(fmeta(f).link)}" target="_blank" rel="noopener">Open</a>` : ""}</li>`).join("")}</ul>`
-        : `<p class="muted" style="margin:0">${S.drive?.connected ? "No documents yet. Attach acknowledgements, receipts, forms or photos here or with an update." : "Documents are saved in Google Drive, which isn't connected yet." + (meP().admin ? " Connect it in More." : " Ask the admin to connect it.")}</p>`}
+        : `<p class="muted" style="margin:0">${S.drive?.connected ? "No documents yet. Attach acknowledgements, receipts, forms or photos here or with an update." : "Documents are saved in Google Drive, which isn't connected yet." + (meP().admin ? " Connect it in your profile (the round button at the top right)." : " Ask the admin to connect it.")}</p>`}
       ${S.folders[t.id] ? `<p class="small" style="margin:12px 0 0"><a href="${esc(S.folders[t.id])}" target="_blank" rel="noopener">Open this task's folder in Google Drive</a></p>` : ""}
       ${removedFiles(t).length ? `<details class="removed"><summary>Removed documents (${removedFiles(t).length})</summary><ul class="doclist">${removedFiles(t).map((m) => `<li><a class="file" href="#/file/${esc(m.id)}"><span class="ficon">${ico("doc")}</span><span class="fname">${esc(m.name)}</span></a><button class="btn small quiet" data-putback="${esc(m.id)}">Put back</button></li>`).join("")}</ul></details>` : ""}
     </section>
@@ -858,7 +991,7 @@ function bindTask(t) {
   on("[data-edit]", () => editSheet(taskById(id)));
   on("[data-attach]", () => attachSheet(taskById(id)));
   on("[data-delete]", async () => {
-    if (!(await confirmBox("Delete this task?", "It disappears for everyone. You can bring it back from the change log in More.", "Delete task", true))) return;
+    if (!(await confirmBox("Delete this task?", "It disappears for everyone. You can bring it back from the change log in your profile (the round button at the top right).", "Delete task", true))) return;
     try {
       const j = await post({ op: "delete", taskId: id });
       S.tasks = S.tasks.filter((x) => x.id !== id); S.rev = j.rev;
@@ -1153,7 +1286,7 @@ function morePage() {
   const shareLine = (p) => !p.email ? `<span class="muted">No Gmail added, so they can't open documents</span>`
     : p.shareError ? `<span class="flag red">${esc(p.email)}: couldn't share the folder</span>`
     : p.shared ? `<span>${esc(p.email)}</span>` : `<span>${esc(p.email)}</span> <span class="muted">(shares once Drive is connected)</span>`;
-  return `<div class="pagehead"><h1>More</h1></div>
+  return `<div class="pagehead"><h1>Profile and settings</h1></div>
   <div class="card pad" style="display:flex;align-items:center;gap:14px;margin-bottom:16px">${avatar(me.id, true)}<div><b style="font-size:1.15rem">${esc(me.name)}</b><div class="muted small">${me.admin ? "Admin" : "Family member"}</div></div></div>
   <div class="card"><ul class="menu">
     <li><a href="#/log">Change log and undo<span class="chev">›</span></a></li>
@@ -1243,7 +1376,7 @@ async function loadLog() {
   try {
     const { log } = await api("/api/data?log=1&limit=300");
     if (!$("#logwrap")) return;
-    let html = `<a class="back" href="#/more">${ico("back")}More</a><div class="pagehead"><div><h1>Change log</h1><div class="sub">Every change anyone made. Undo reverses just that one change.</div></div></div>`;
+    let html = `<a class="back" href="#/me">${ico("back")}Profile and settings</a><div class="pagehead"><div><h1>Change log</h1><div class="sub">Every change anyone made. Undo reverses just that one change.</div></div></div>`;
     if (!log.length) html += `<div class="card empty"><h2>No changes yet</h2></div>`;
     let day = "";
     for (const e of log) {
@@ -1282,7 +1415,7 @@ const wake = () => { const idle = Date.now() - lastTouch > 10 * 60000; lastTouch
 setInterval(() => { if (document.visibilityState === "visible" && Date.now() - lastTouch < 10 * 60000) refresh(); }, 45000);
 const back = hashParam("drive");
 if (back) {
-  history.replaceState(null, "", "#/more");
+  history.replaceState(null, "", "#/me");
   const msg = { connected: ["Google Drive connected", false], cancelled: ["Google Drive wasn't connected: you cancelled on Google's page.", true], expired: ["That took too long. Tap Connect Google Drive again.", true], failed: ["Google Drive couldn't be connected. Check the Google setup steps and try again.", true] }[back];
   if (msg) setTimeout(() => toast(msg[0], msg[1]), 600);
 }
